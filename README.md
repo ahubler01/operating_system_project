@@ -25,7 +25,7 @@ Alejandra Hernandez
 Armand Hubler 
 Juan Carlos Vargas
 Felipe Gomez
-
+Mariano Delpree
 ## Useful Resources:
 Trello: https://trello.com/invite/b/66f15d13f5f5d18848ee0907/ATTId4317201feb77f8bc3b3d3ac262e8ac990AABF4B/operations-systems
 
