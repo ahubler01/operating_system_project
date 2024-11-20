@@ -1,51 +1,41 @@
 # entities/taxi.py
-
 import threading
 import time
-from queue import Queue, Empty
+from queue import Empty
+
 
 class Taxi(threading.Thread):
     taxi_id_counter = 1
     taxi_id_lock = threading.Lock()
 
-    def __init__(self, city_to_airport_queue, airport_to_city_queue):
+    def __init__(self, city_to_airport_queue, airport_to_city_queue, airport):
         super().__init__()
         with Taxi.taxi_id_lock:
             self.id = Taxi.taxi_id_counter
             Taxi.taxi_id_counter += 1
         self.city_to_airport_queue = city_to_airport_queue
         self.airport_to_city_queue = airport_to_city_queue
+        self.is_active = True
+        self.airport = airport
 
     def run(self):
-        # First, pick up departing passengers (from city to airport)
+        while self.is_active:
+            self.pick_up(self.city_to_airport_queue, "city_to_airport")
+            self.pick_up(self.airport_to_city_queue, "airport_to_city")
+
+    def pick_up(self, queue, direction):
         try:
-            passenger = self.city_to_airport_queue.get(timeout=5)
-            print(f"Taxi {self.id} picked up {passenger.name} ({passenger.type}) from {passenger.origin} to {passenger.destination}.")
-            print(f"Passenger details: Terminal {passenger.terminal}, Airline {passenger.airline}, Flight {passenger.flight_nb}")
-            # Simulate driving to the airport
-            time.sleep(2)
-            print(f"Passenger {passenger.id} ({passenger.name}) arrives at {passenger.destination} with Taxi {self.id}.")
-            self.city_to_airport_queue.task_done()
+            passenger = queue.get(timeout=5)
+            print(f"Taxi {self.id} picked up {passenger.name} for {direction}.")
+            self.simulate_drive(passenger)
+            queue.task_done()
+            if direction == "city_to_airport":
+                self.airport.counter_queue.put(passenger)
+            elif direction == "airport_to_city":
+                pass
         except Empty:
-            # No passengers to pick up to the airport
-            print(f"Taxi {self.id} found no departing passengers.")
             pass
 
-        # Taxi becomes available at the airport
-        print(f"Taxi {self.id} is now available at the airport.")
-
-        # Then, pick up arriving passengers (from airport to city)
-        try:
-            passenger = self.airport_to_city_queue.get(timeout=5)
-            print(f"Taxi {self.id} picked up {passenger.name} ({passenger.type}) from {passenger.origin} to {passenger.destination}.")
-            print(f"Passenger details: Terminal {passenger.terminal}, Airline {passenger.airline}, Flight {passenger.flight_nb}")
-            # Simulate driving to the destination
-            time.sleep(2)
-            print(f"Taxi {self.id} dropped off Passenger {passenger.id} ({passenger.name}) at {passenger.destination}.")
-            self.airport_to_city_queue.task_done()
-        except Empty:
-            # No passengers to pick up from the airport
-            print(f"Taxi {self.id} found no arriving passengers.")
-            pass
-
-        print(f"Taxi {self.id} has completed its trips.")
+    def simulate_drive(self, passenger):
+        time.sleep(2)
+        print(f"Taxi {self.id} dropped off {passenger.name} at destination.")
