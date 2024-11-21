@@ -9,6 +9,7 @@ from entities.counter import Counter
 from entities.security import Security
 from entities.shops import Shops
 from entities.gates import Gates
+from entities.aircraft import Aircraft
 
 class Airport:
     def __init__(self, num_counters, num_taxis, num_security_lines, num_passengers, num_shops, num_gates, num_flights):
@@ -33,8 +34,17 @@ class Airport:
         # Set available flights and map them to gates
         all_flights = ["IB123", "FR456", "VY789", "EJ101", "BA202", "LH303"]
         self.available_flights = random.sample(all_flights, num_flights)
-        self.flights_to_gates = {self.available_flights[i]: i % num_gates for i in range(num_flights)}
+        self.flights_to_gates = {}
+        self.aircrafts = []
 
+        # Assign flights to gates and create aircraft objects
+        for i, flight in enumerate(self.available_flights):
+            gate_id = i % num_gates
+            departure_time = time.time() + random.randint(10, 60)  # Departure within 10-60 seconds
+            self.flights_to_gates[flight] = gate_id
+            aircraft = Aircraft(flight, gate_id, departure_time, self)
+            self.aircrafts.append(aircraft)
+            
         # Generate passengers
         for _ in range(num_passengers // 2):
             passenger = Passenger.generate_random_passenger(self, "departing")
@@ -58,9 +68,11 @@ class Airport:
         for gate in self.gates:
             gate.start()
 
-        # Start taxis
         for taxi in self.taxis:
             taxi.start()
+            
+        for aircraft in self.aircrafts:
+            aircraft.start()
 
         # Wait for queues to empty
         self.city_to_airport_queue.join()
@@ -94,3 +106,6 @@ class Airport:
         for taxi in self.taxis:
             taxi.is_active = False
             taxi.join()
+            
+        for aircraft in self.aircrafts:
+            aircraft.join()

@@ -13,7 +13,7 @@ class Gates(threading.Thread):
     def run(self):
         while self.is_active:
             try:
-                passenger = self.airport.gates_queues[self.id].get(timeout=self.airport.queue_timeout)
+                passenger = self.airport.gates_queues[self.id].get(timeout=1)
                 print(f"{passenger.name} is boarding at gate {self.id}. Flight: {passenger.flight_nb}")
                 time.sleep(2)
                 self.airport.gates_queues[self.id].task_done()
