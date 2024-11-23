@@ -2,6 +2,7 @@
 import threading
 from queue import Empty
 import time 
+import random
 
 class Counter(threading.Thread):
     def __init__(self, id, airport):
@@ -14,12 +15,17 @@ class Counter(threading.Thread):
         while self.is_active:
             try:
                 passenger = self.airport.counter_queue.get(timeout=1)
-                print(f"Counter {self.id} serving {passenger.name}.")
-                time.sleep(2)
+                self.airport.monitor.increment_usage("counters", self.id)
+                
+                self.process_passenger(passenger)
+                
                 self.airport.security_check_queue.put(passenger)
+                self.airport.counter_queue.task_done()
+                self.airport.monitor.decrement_usage("counters", self.id)
             except Empty:
                 pass
 
     def process_passenger(self, passenger):
-        print(f"Counter {self.id} processing {passenger.name}.")
-        time.sleep(2)
+        print(f"Counter {self.id} serving {passenger.name}.")
+        time_ = random.randint(1, 8)
+        time.sleep(time_)

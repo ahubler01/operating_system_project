@@ -2,6 +2,7 @@
 import threading
 from queue import Empty
 import time 
+import random 
 
 class Shops(threading.Thread):
     def __init__(self, id, airport):
@@ -14,14 +15,19 @@ class Shops(threading.Thread):
         while self.is_active:
             try:
                 passenger = self.airport.shops_queues[self.id].get(timeout=1)
-                print(f"Shop {self.id} serving {passenger.name}.")
-                time.sleep(2)
+                self.airport.monitor.increment_usage("shops", self.id)
+
+                self.process_passenger(passenger)
+
                 gate_queue = self.airport.gates_queues[self.id % len(self.airport.gates_queues)]
                 gate_queue.put(passenger)
                 self.airport.shops_queues[self.id].task_done()
+                self.airport.monitor.decrement_usage("shops", self.id)
+            
             except Empty:
                 pass
 
     def process_passenger(self, passenger):
-        print(f"Shop {self.id} processing {passenger.name}.")
-        time.sleep(2)
+        print(f"Shop {self.id} serving {passenger.name}.")
+        time_ = random.randint(1, 5)
+        time.sleep(time_)

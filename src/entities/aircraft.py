@@ -2,39 +2,42 @@
 import threading
 import time
 from queue import Empty
+import random
 
 class Aircraft(threading.Thread):
     def __init__(self, flight_number, gate_id, departure_time, airport):
         super().__init__()
         self.flight_number = flight_number
         self.gate_id = gate_id
-        self.departure_time = departure_time  # Seconds since simulation start
+        self.departure_time = departure_time
         self.airport = airport
 
+    def assign_gate(self, gate_id):
+        """Assign a gate to the aircraft and set the departure time."""
+        self.gate_id = gate_id
+        self.departure_time = time.time() + random.randint(30, 120)  # Departure in 30-120 seconds
+
     def run(self):
-        # Print aircraft arrival details
+        if self.gate_id is None:
+            return  # Cannot run without a gate
+
         print(f"Aircraft {self.flight_number} has arrived at Gate {self.gate_id}.")
         print(f"Scheduled departure time: {time.strftime('%H:%M:%S', time.localtime(self.departure_time))}")
 
-        # Wait until 5 seconds before departure for boarding
+        # Wait until it's time to start boarding
         boarding_start_time = self.departure_time - 5
-        while time.time() < boarding_start_time:
+        while time.time() < boarding_start_time and not self.airport.simulation_end.is_set():
             time.sleep(1)
+
+        if self.airport.simulation_end.is_set():
+            return
 
         print(f"Boarding for flight {self.flight_number} at Gate {self.gate_id} has started.")
 
-        # Final boarding call
-        time.sleep(3)  # Simulate time for boarding to proceed
-        print(f"Final boarding call for flight {self.flight_number} at Gate {self.gate_id}.")
+        # Simulate boarding
+        time.sleep(3)  # Boarding duration
 
-        # Let passengers board
-        while not self.airport.gates_queues[self.gate_id].empty():
-            try:
-                passenger = self.airport.gates_queues[self.gate_id].get_nowait()
-                print(f"Passenger {passenger.name} boarded flight {self.flight_number}.")
-                self.airport.gates_queues[self.gate_id].task_done()
-            except Empty:
-                break
-        
-        # Print departure details
         print(f"Flight {self.flight_number} is departing from Gate {self.gate_id}.")
+
+        # Release the gate after departure
+        self.airport.release_gate(self.gate_id, self.flight_number)

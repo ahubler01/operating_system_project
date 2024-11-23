@@ -2,6 +2,7 @@
 import threading
 import time
 from queue import Empty
+import random 
 
 
 class Taxi(threading.Thread):
@@ -27,8 +28,10 @@ class Taxi(threading.Thread):
         try:
             passenger = queue.get(timeout=5)
             print(f"Taxi {self.id} picked up {passenger.name} for {direction}.")
+            self.airport.monitor.increment_usage(f"taxis_{direction}", self.id)
             self.simulate_drive(passenger)
             queue.task_done()
+            self.airport.monitor.decrement_usage(f"taxis_{direction}", self.id)
             if direction == "city_to_airport":
                 self.airport.counter_queue.put(passenger)
             elif direction == "airport_to_city":
@@ -37,5 +40,6 @@ class Taxi(threading.Thread):
             pass
 
     def simulate_drive(self, passenger):
-        time.sleep(2)
+        time_ = random.randint(1, 10)
+        time.sleep(time_)
         print(f"Taxi {self.id} dropped off {passenger.name} at destination.")
