@@ -1,11 +1,16 @@
 # entities/shops.py
+
 import threading
 from queue import Empty
 import time 
 import random 
 
 class Shops(threading.Thread):
-    def __init__(self, id, airport):
+    def __init__(self, 
+                 id, 
+                 airport
+                ):
+        
         super().__init__()
         self.id = id
         self.airport = airport
@@ -31,3 +36,8 @@ class Shops(threading.Thread):
         print(f"Shop {self.id} serving {passenger.name}.")
         time_ = random.randint(1, 5)
         time.sleep(time_)
+        
+    def stop(self):
+        """Stop the shop thread."""
+        self.is_active = False
+        self.join()
