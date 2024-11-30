@@ -27,12 +27,15 @@ class Passenger:
         self.destination = destination
         self.airport = airport
         self.gate_id = gate_id
+        
+        with self.airport.passenger_count_lock:
+            self.airport.total_passengers += 1
 
     @staticmethod
     def generate_random_passenger(airport, passenger_type):
         # Ensure there are flights with assigned gates
         if not airport.flights_to_gates:
-            return None  # No flights available yet
+            return None  
 
         chosen_name = Passenger.passenger_id_counter
         Passenger.passenger_id_counter += 1
@@ -50,7 +53,7 @@ class Passenger:
             p_luggage=random.random(),
             p_shop=random.random(),
             money=random.randint(50, 200),
-            airline=flight[:2],  # Assuming airline code is the first two letters
+            airline=flight[:2], 
             flight_nb=flight,
             destination="City Center" if passenger_type == "arriving" else "Madrid Airport",
             airport=airport,

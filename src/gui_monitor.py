@@ -5,16 +5,18 @@ from tkinter import ttk
 import queue
 
 class GUIMonitor:
-    def __init__(self, monitor):
+    def __init__(self, 
+                 monitor
+                 ):
+        
         self.monitor = monitor
         self.root = tk.Tk()
         self.root.title("Airport Usage Monitor")
         self.root.geometry("700x400")
-        self.root.configure(bg="white")  # Set the background color to white
+        self.root.configure(bg="white")  
 
         self.update_queue = queue.Queue()
 
-        # Create the table (Treeview widget)
         self.tree = ttk.Treeview(
             self.root, 
             columns=("Type", "Usage (%)", "Total"), 
@@ -45,19 +47,25 @@ class GUIMonitor:
         """Process all updates in the queue."""
         while not self.update_queue.empty():
             station_type = self.update_queue.get()
-            # Update the GUI (triggered by periodic update)
             self.update_gui()
 
     def update_gui(self):
         """Update the table with the latest usage stats."""
-        # Clear the existing rows in the table
         for item in self.tree.get_children():
             self.tree.delete(item)
+
+        total_passengers = self.monitor.airport.total_passengers
+        aircraft_waiting = len(self.monitor.airport.aircraft_queue.queue) + len(self.monitor.airport.active_aircrafts)
+
+        self.tree.insert("", "end", values=("Total Passengers", total_passengers, ""))
+
+        self.tree.insert("", "end", values=("Aircraft Waiting", aircraft_waiting, ""))
+
+        self.tree.insert("", "end", values=("", "", ""))
 
         # Populate the table with summarized data
         for station_type, stats in self.monitor.usage_stats.items():
             if "taxis" in station_type:
-                # Special handling for taxi ride types
                 ride_type = station_type.replace("_", " ").capitalize()
                 total = self.monitor.total_entities["taxis"]
                 used = sum(stats.values())
@@ -78,12 +86,17 @@ class GUIMonitor:
                     values=(station_type.capitalize(), f"{usage_percentage:.2f}%", total)
                 )
 
+
     def periodic_update(self):
         """Periodically update the GUI using tkinter's thread-safe `after()` method."""
         self.process_updates()
-        self.root.after(2000, self.periodic_update)  # Schedule the next update in 2 seconds
+        self.root.after(2000, self.periodic_update)  
 
     def start(self):
         """Start the GUI."""
-        self.periodic_update()  # Start periodic updates
+        self.periodic_update() 
         self.root.mainloop()
+        
+    def stop(self):
+        """Stop the GUI."""
+        self.root.after(0, self.root.quit)

@@ -1,4 +1,5 @@
 # entities/gates.py
+
 import threading
 from queue import Empty
 import time
@@ -6,7 +7,11 @@ import random
 
 
 class Gates(threading.Thread):
-    def __init__(self, id, airport):
+    def __init__(self, 
+                 id, 
+                 airport
+                ):
+        
         super().__init__()
         self.id = id
         self.airport = airport
@@ -30,3 +35,6 @@ class Gates(threading.Thread):
         print(f"{passenger.name} is boarding at gate {self.id}. Flight: {passenger.flight_nb}")
         time_ = random.randint(1, 5)
         time.sleep(time_)
+        
+        with self.airport.passenger_count_lock:
+            self.airport.total_passengers -= 1

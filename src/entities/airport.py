@@ -1,7 +1,11 @@
+# entities/airport.py
+
 import threading
 import time
 import random
+
 from queue import Queue, Empty
+
 from entities.taxi import Taxi
 from entities.passenger import Passenger
 from entities.counter import Counter
@@ -14,7 +18,18 @@ from gui_monitor import GUIMonitor
 from monitor import Monitor
 
 class Airport:
-    def __init__(self, num_counters, num_taxis, num_security_lines, num_passengers, num_shops, num_gates, num_flights):
+    def __init__(self, 
+                 num_counters, 
+                 num_taxis, 
+                 num_security_lines, 
+                 num_passengers, 
+                 num_shops, 
+                 num_gates, 
+                 num_flights, 
+                 dynamic_scaling_enabled=False, 
+                 export_timeseries_data=False
+                ):
+        
         # Initialize queues
         self.city_to_airport_queue = Queue()
         self.airport_to_city_queue = Queue()
@@ -32,19 +47,30 @@ class Airport:
         self.gates = [Gates(i, self) for i in range(num_gates)]
         self.taxis = [Taxi(self.city_to_airport_queue, self.airport_to_city_queue, self) for _ in range(num_taxis)]
 
-        self.monitor = Monitor(self)
+        self.monitor = Monitor(self, export_timeseries_data)
         self.gui_monitor = GUIMonitor(self.monitor)
 
         # Initialize flights and aircraft
         self.aircrafts = []
         self.flights_to_gates = {}  # Map flights to gates
-        self.gate_availability = set(range(num_gates))  # Gates available
+        self.gate_availability = set(range(num_gates)) 
         self.aircraft_queue = Queue()  # Aircraft waiting for gates
+
+        self.total_passengers = 0
+        self.passenger_count_lock = threading.Lock()
+
+        # Active aircrafts
+        self.active_aircrafts = []
+        self.aircraft_lock = threading.Lock()
+        self.dynamic_scaling_enabled = dynamic_scaling_enabled 
 
         self.init_flights(num_flights)
 
         # Generate passengers after flights and gates are initialized
         self.generate_initial_passengers(num_passengers)
+
+        # Start monitoring usage stats
+        self.monitor.start_monitoring()
 
     def init_flights(self, num_flights):
         """Initialize flights and aircraft before generating passengers."""
@@ -72,6 +98,15 @@ class Airport:
                     self.aircraft_queue.put(aircraft)
             except Empty:
                 continue
+
+    def register_active_aircraft(self, aircraft):
+        with self.aircraft_lock:
+            self.active_aircrafts.append(aircraft)
+
+    def deregister_active_aircraft(self, aircraft):
+        with self.aircraft_lock:
+            if aircraft in self.active_aircrafts:
+                self.active_aircrafts.remove(aircraft)
 
     def add_new_aircraft(self):
         """Add new aircraft to the queue with flight numbers."""
@@ -111,7 +146,8 @@ class Airport:
     def generate_passengers(self):
         """Continuously generate passengers during simulation."""
         while not self.simulation_end.is_set():
-            time.sleep(2)  # Generate new passengers every 15 seconds
+            time_ = random.randint(1, 5)
+            time.sleep(time_)
             passenger_type = random.choice(["departing", "arriving"])
             passenger = Passenger.generate_random_passenger(self, passenger_type)
             if passenger:
@@ -126,8 +162,91 @@ class Airport:
             time.sleep(30)
             taxi = Taxi(self.city_to_airport_queue, self.airport_to_city_queue, self)
             self.taxis.append(taxi)
+            self.monitor.total_entities["taxis"] += 1 
             taxi.start()
 
+    def add_entity(self, station_type):
+        """Add a new entity of the specified type."""
+        time.sleep(1)  
+        if station_type == "counters":
+            new_id = len(self.counters)
+            counter = Counter(new_id, self)
+            self.counters.append(counter)
+            self.monitor.total_entities["counters"] += 1
+            counter.start()
+            print(f"Added new counter {new_id}")
+        elif station_type == "security":
+            new_id = len(self.security_lines)
+            security = Security(new_id, self)
+            self.security_lines.append(security)
+            self.monitor.total_entities["security"] += 1
+            security.start()
+            print(f"Added new security line {new_id}")
+        elif station_type == "shops":
+            new_id = len(self.shops)
+            shop = Shops(new_id, self)
+            self.shops.append(shop)
+            self.shops_queues.append(Queue()) 
+            self.monitor.total_entities["shops"] += 1
+            shop.start()
+            print(f"Added new shop {new_id}")
+        elif station_type == "taxis":
+            taxi = Taxi(self.city_to_airport_queue, self.airport_to_city_queue, self)
+            self.taxis.append(taxi)
+            self.monitor.total_entities["taxis"] += 1
+            taxi.start()
+            print(f"Added new taxi {taxi.id}")
+        else:
+            print(f"Unknown station type: {station_type}")
+
+    def remove_entity(self, station_type):
+        """Remove an entity of the specified type, if possible."""
+        time.sleep(1)  
+
+        if station_type == "counters":
+            with threading.Lock():
+                if len(self.counters) > 1:
+                    entity_to_remove = self.counters.pop()
+                    entity_to_remove.stop()
+                    self.monitor.total_entities["counters"] -= 1
+                    print(f"Removed counter {entity_to_remove.id}")
+                else:
+                    print("Cannot remove counter: minimum number reached.")
+
+        elif station_type == "security":
+            with threading.Lock():
+                if len(self.security_lines) > 1:
+                    entity_to_remove = self.security_lines.pop()
+                    entity_to_remove.stop()
+                    self.monitor.total_entities["security"] -= 1
+                    print(f"Removed security line {entity_to_remove.id}")
+                else:
+                    print("Cannot remove security line: minimum number reached.")
+
+        elif station_type == "shops":
+            with threading.Lock():
+                if len(self.shops) > 1:
+                    entity_to_remove = self.shops.pop()
+                    entity_to_remove.stop()
+                    self.shops_queues.pop()
+                    self.monitor.total_entities["shops"] -= 1
+                    print(f"Removed shop {entity_to_remove.id}")
+                else:
+                    print("Cannot remove shop: minimum number reached.")
+
+        elif station_type == "taxis":
+            with threading.Lock():
+                if len(self.taxis) > 1:
+                    entity_to_remove = self.taxis.pop()
+                    entity_to_remove.stop()
+                    self.monitor.total_entities["taxis"] -= 1
+                    print(f"Removed taxi {entity_to_remove.id}")
+                else:
+                    print("Cannot remove taxi: minimum number reached.")
+
+        else:
+            print(f"Unknown station type: {station_type}")
+            
     def start_simulation(self):
         """Start the airport simulation."""
         # Start entity threads
@@ -138,12 +257,17 @@ class Airport:
         threading.Thread(target=self.generate_passengers, daemon=True).start()
         threading.Thread(target=self.add_taxis_periodically, daemon=True).start()
 
-        # Simulation runs indefinitely until manually terminated
         try:
-            while True:
+            while not self.simulation_end.is_set():
                 time.sleep(1)
+                with self.passenger_count_lock:
+                    total_passengers = self.total_passengers
+                if total_passengers < 15:
+                    print("Total passengers less than 10. Stopping simulation.")
+                    self.stop_simulation()
+                    break
         except KeyboardInterrupt:
-            self.stop_simulation()
+            self.stop_simulation()  
 
     def stop_simulation(self):
         """Stop the simulation and clean up."""
@@ -163,3 +287,6 @@ class Airport:
 
         # Stop monitoring
         self.monitor.stop_monitoring()
+
+        # Stop GUI monitor
+        self.gui_monitor.stop()

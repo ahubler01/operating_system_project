@@ -17,6 +17,9 @@ if __name__ == "__main__":
     num_shops = 5
     num_gates = 7
     num_flights = 10
+    
+    dynamic_scaling_enabled = False
+    export_timeseries_data = False
 
     # Create the Airport instance
     airport = Airport(
@@ -27,6 +30,8 @@ if __name__ == "__main__":
         num_shops=num_shops,
         num_gates=num_gates,
         num_flights=num_flights,
+        dynamic_scaling_enabled=dynamic_scaling_enabled,
+        export_timeseries_data=export_timeseries_data
     )
 
     # Run the simulation in a separate thread

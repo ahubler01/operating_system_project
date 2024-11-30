@@ -1,11 +1,16 @@
 # entities/security.py
+
 import threading
 from queue import Empty
 import random 
 import time
 
 class Security(threading.Thread):
-    def __init__(self, id, airport):
+    def __init__(self, 
+                 id, 
+                 airport
+                ):
+        
         super().__init__()
         self.id = id
         self.airport = airport
@@ -32,4 +37,9 @@ class Security(threading.Thread):
         print(f"Security {self.id} serving {passenger.name}.")
         time_ = random.randint(1, 8)
         time.sleep(time_)
+    
+    def stop(self):
+        """Stop the security thread."""
+        self.is_active = False
+        self.join()
         
