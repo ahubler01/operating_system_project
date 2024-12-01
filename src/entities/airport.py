@@ -299,7 +299,7 @@ class Airport:
             while not self.simulation_end.is_set():
                 time.sleep(1)
                 elapsed_time = time.time() - start_time
-                if elapsed_time >= 2:
+                if elapsed_time >= 120:
                     print("Simulation time of 1 minute has elapsed. Stopping simulation.")
                     self.stop_simulation()
         except KeyboardInterrupt:

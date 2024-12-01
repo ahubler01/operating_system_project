@@ -19,7 +19,7 @@ if __name__ == "__main__":
     num_flights = 10
     
     dynamic_scaling_enabled = True
-    export_timeseries_data = False
+    export_timeseries_data = True
 
     # Create the Airport instance
     airport = Airport(
