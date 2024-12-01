@@ -17,14 +17,14 @@ class Shops(threading.Thread):
         self.is_active = True
 
     def run(self):
-        while self.is_active:
+        while self.is_active and not self.airport.simulation_end.is_set():
             try:
                 passenger = self.airport.shops_queues[self.id].get(timeout=1)
                 self.airport.monitor.increment_usage("shops", self.id)
 
                 self.process_passenger(passenger)
 
-                gate_queue = self.airport.gates_queues[self.id % len(self.airport.gates_queues)]
+                gate_queue = self.airport.gates_queues[passenger.gate_id]
                 gate_queue.put(passenger)
                 self.airport.shops_queues[self.id].task_done()
                 self.airport.monitor.decrement_usage("shops", self.id)

@@ -12,13 +12,13 @@ import random
 if __name__ == "__main__":
     num_counters = 4
     num_security_lines = 5
-    num_taxis = 15
-    num_passengers = 100
+    num_taxis = 45
+    num_passengers = 150
     num_shops = 5
     num_gates = 7
     num_flights = 10
     
-    dynamic_scaling_enabled = False
+    dynamic_scaling_enabled = True
     export_timeseries_data = False
 
     # Create the Airport instance

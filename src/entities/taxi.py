@@ -48,7 +48,11 @@ class Taxi(threading.Thread):
         time_ = random.randint(1, 10)
         time.sleep(time_)
         print(f"Taxi {self.id} dropped off {passenger.name} at destination.")
-        if direction == "airport_to_city":
+        
+        if direction == "city_to_airport":
+            with self.airport.passenger_count_lock:
+                self.airport.total_passengers += 1   
+        elif direction == "airport_to_city":
             with self.airport.passenger_count_lock:
                 self.airport.total_passengers -= 1
 

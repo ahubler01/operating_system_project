@@ -3,7 +3,6 @@
 import threading
 import time
 import random
-
 from queue import Queue, Empty
 
 from entities.taxi import Taxi
@@ -36,7 +35,7 @@ class Airport:
         self.counter_queue = Queue()
         self.security_check_queue = Queue()
         self.shops_queues = [Queue() for _ in range(num_shops)]
-        self.gates_queues = [Queue() for _ in range(num_gates)]
+        self.gates_queues = {} 
 
         self.simulation_end = threading.Event()  # Will only be set when the simulation is to end
 
@@ -44,7 +43,15 @@ class Airport:
         self.counters = [Counter(i, self) for i in range(num_counters)]
         self.security_lines = [Security(i, self) for i in range(num_security_lines)]
         self.shops = [Shops(i, self) for i in range(num_shops)]
-        self.gates = [Gates(i, self) for i in range(num_gates)]
+        
+        # Initialize gates and their queues
+        self.gates = [Gates(gate_id, self) for gate_id in range(num_gates)]
+        self.gates_queues = {gate_id: Queue() for gate_id in range(num_gates)}
+
+        # Start gate entities
+        for gate in self.gates:
+            gate.start()
+
         self.taxis = [Taxi(self.city_to_airport_queue, self.airport_to_city_queue, self) for _ in range(num_taxis)]
 
         self.monitor = Monitor(self, export_timeseries_data)
@@ -52,9 +59,17 @@ class Airport:
 
         # Initialize flights and aircraft
         self.aircrafts = []
-        self.flights_to_gates = {}  # Map flights to gates
-        self.gate_availability = set(range(num_gates)) 
-        self.aircraft_queue = Queue()  # Aircraft waiting for gates
+        self.all_flights = [] 
+        self.flights_to_gates = {}  
+        self.flights_to_aircraft = {}  
+        self.gate_to_aircraft = {}     
+        self.gate_availability = set(range(num_gates))  #
+        self.aircraft_queue = Queue()
+
+        self.passengers_per_gate = {}
+
+        self.flight_capacities = {}
+        self.flight_capacity_lock = threading.Lock()
 
         self.total_passengers = 0
         self.passenger_count_lock = threading.Lock()
@@ -89,13 +104,22 @@ class Airport:
                 if self.gate_availability:
                     gate_id = self.gate_availability.pop()
                     aircraft.assign_gate(gate_id)
-                    self.flights_to_gates[aircraft.flight_number] = gate_id  # Map flight to gate
+                    self.flights_to_gates[aircraft.flight_number] = gate_id  
+                    self.flights_to_aircraft[aircraft.flight_number] = aircraft 
+                    self.gate_to_aircraft[gate_id] = aircraft
+                    self.passengers_per_gate[gate_id] = 0  
+
+                    # Assign aircraft to the existing gate entity
+                    gate_entity = self.gates[gate_id]
+                    gate_entity.assign_aircraft(aircraft)
+
                     print(f"Gate {gate_id} allocated to Aircraft {aircraft.flight_number}.")
                     aircraft.start()
                     self.aircrafts.append(aircraft)
                 else:
                     # No gates available, put the aircraft back in the queue
                     self.aircraft_queue.put(aircraft)
+                    time.sleep(1)  # Wait a bit before retrying
             except Empty:
                 continue
 
@@ -111,59 +135,73 @@ class Airport:
     def add_new_aircraft(self):
         """Add new aircraft to the queue with flight numbers."""
         flight_index = 0
+
+        # Add the first aircraft immediately
+        flight_number = self.all_flights[flight_index % len(self.all_flights)]
+        flight_index += 1
+        aircraft = Aircraft(flight_number, None, None, self)
+        with self.flight_capacity_lock:
+            self.flight_capacities[flight_number] = aircraft.max_capacity
+        self.aircraft_queue.put(aircraft)
+        print(f"Aircraft {flight_number} added to the queue immediately.")
+
         while not self.simulation_end.is_set():
             time.sleep(random.randint(10, 30))  # Wait before adding a new aircraft
+            if self.simulation_end.is_set():
+                break  # Exit if simulation has ended
             flight_number = self.all_flights[flight_index % len(self.all_flights)]
             flight_index += 1
             aircraft = Aircraft(flight_number, None, None, self)
+            with self.flight_capacity_lock:
+                self.flight_capacities[flight_number] = aircraft.max_capacity
             self.aircraft_queue.put(aircraft)
             print(f"Aircraft {flight_number} added to the queue.")
 
     def release_gate(self, gate_id, flight_number):
         """Release a gate after a flight departs."""
         self.gate_availability.add(gate_id)
-        del self.flights_to_gates[flight_number]  # Remove the flight-to-gate mapping
+
+        del self.flights_to_gates[flight_number]  
+        del self.flights_to_aircraft[flight_number] 
+        del self.gate_to_aircraft[gate_id]
+
+        with self.flight_capacity_lock:
+            del self.flight_capacities[flight_number]
+        
+        # Reset passenger count for the gate
+        self.passengers_per_gate[gate_id] = 0
+
+        # Release the aircraft from the gate entity
+        gate_entity = self.gates[gate_id]
+        gate_entity.release_aircraft()
+
         print(f"Gate {gate_id} is now available.")
 
     def generate_initial_passengers(self, num_passengers):
-        """Generate initial passengers after flights are set up."""
+        """Generate initial departing passengers after flights are set up."""
         # Wait until at least one flight has a gate assigned
         while not self.flights_to_gates:
             time.sleep(1)
 
-        # Generate departing passengers
-        for _ in range(num_passengers // 2):
+        print(f"Generating {num_passengers} initial departing passengers.")
+
+        # Generate only departing passengers
+        for _ in range(num_passengers):
             passenger = Passenger.generate_random_passenger(self, "departing")
             if passenger:
                 self.city_to_airport_queue.put(passenger)
-
-        # Generate arriving passengers
-        for _ in range(num_passengers // 2):
-            passenger = Passenger.generate_random_passenger(self, "arriving")
-            if passenger:
-                self.airport_to_city_queue.put(passenger)
+                print(f"Passenger {passenger.name} added to city_to_airport_queue.")
 
     def generate_passengers(self):
-        """Continuously generate passengers during simulation."""
+        """Continuously generate departing passengers during simulation."""
         while not self.simulation_end.is_set():
             time_ = random.randint(1, 5)
             time.sleep(time_)
-            passenger_type = random.choice(["departing", "arriving"])
-            passenger = Passenger.generate_random_passenger(self, passenger_type)
+            if self.simulation_end.is_set():
+                break  # Exit if simulation has ended
+            passenger = Passenger.generate_random_passenger(self, "departing")
             if passenger:
-                if passenger_type == "departing":
-                    self.city_to_airport_queue.put(passenger)
-                else:
-                    self.airport_to_city_queue.put(passenger)
-
-    def add_taxis_periodically(self):
-        """Add taxis to the simulation periodically."""
-        while not self.simulation_end.is_set():
-            time.sleep(30)
-            taxi = Taxi(self.city_to_airport_queue, self.airport_to_city_queue, self)
-            self.taxis.append(taxi)
-            self.monitor.total_entities["taxis"] += 1 
-            taxi.start()
+                self.city_to_airport_queue.put(passenger)
 
     def add_entity(self, station_type):
         """Add a new entity of the specified type."""
@@ -250,22 +288,20 @@ class Airport:
     def start_simulation(self):
         """Start the airport simulation."""
         # Start entity threads
-        for entity in self.counters + self.security_lines + self.shops + self.gates + self.taxis:
+        for entity in self.counters + self.security_lines + self.shops + self.taxis:
             entity.start()
 
         # Start passenger and taxi generation threads
         threading.Thread(target=self.generate_passengers, daemon=True).start()
-        threading.Thread(target=self.add_taxis_periodically, daemon=True).start()
 
+        start_time = time.time()
         try:
             while not self.simulation_end.is_set():
                 time.sleep(1)
-                with self.passenger_count_lock:
-                    total_passengers = self.total_passengers
-                if total_passengers < 15:
-                    print("Total passengers less than 10. Stopping simulation.")
+                elapsed_time = time.time() - start_time
+                if elapsed_time >= 2:
+                    print("Simulation time of 1 minute has elapsed. Stopping simulation.")
                     self.stop_simulation()
-                    break
         except KeyboardInterrupt:
             self.stop_simulation()  
 
@@ -277,16 +313,13 @@ class Airport:
         for entity in self.counters + self.security_lines + self.shops + self.gates + self.taxis:
             entity.is_active = False
 
-        # Wait for all entities to finish
-        for entity in self.counters + self.security_lines + self.shops + self.gates + self.taxis:
-            entity.join()
-
-        # Wait for aircraft threads to finish
+        # Similarly for aircraft threads
         for aircraft in self.aircrafts:
-            aircraft.join()
+            aircraft.is_active = False
 
         # Stop monitoring
         self.monitor.stop_monitoring()
 
         # Stop GUI monitor
         self.gui_monitor.stop()
+

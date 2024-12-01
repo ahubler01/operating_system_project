@@ -14,22 +14,27 @@ class Security(threading.Thread):
         super().__init__()
         self.id = id
         self.airport = airport
+        self.is_active = True
 
     def run(self):
-        while not self.airport.simulation_end.is_set():
+        while self.is_active and not self.airport.simulation_end.is_set():
             try:
                 passenger = self.airport.security_check_queue.get(timeout=1)
                 self.airport.monitor.increment_usage("security", self.id)
 
-                self.process_passenger(passenger) 
+                self.process_passenger(passenger)
                 
                 self.airport.monitor.decrement_usage("security", self.id)
-                self.airport.security_check_queue.task_done()                  
+                self.airport.security_check_queue.task_done()
                 
                 if random.random() < passenger.p_shop:
-                    self.airport.shops_queues[self.id % len(self.airport.shops_queues)].put(passenger)
+                    # Send to shops
+                    shop_queue_index = self.id % len(self.airport.shops_queues)
+                    self.airport.shops_queues[shop_queue_index].put(passenger)
                 else:
-                    self.airport.gates_queues[self.id % len(self.airport.gates_queues)].put(passenger)
+                    # Send to assigned gate
+                    gate_queue = self.airport.gates_queues[passenger.gate_id]
+                    gate_queue.put(passenger)
             except Empty:
                 pass
 

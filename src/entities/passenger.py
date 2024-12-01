@@ -27,22 +27,32 @@ class Passenger:
         self.destination = destination
         self.airport = airport
         self.gate_id = gate_id
-        
-        with self.airport.passenger_count_lock:
-            self.airport.total_passengers += 1
 
     @staticmethod
     def generate_random_passenger(airport, passenger_type):
         # Ensure there are flights with assigned gates
         if not airport.flights_to_gates:
-            return None  
+            return None  # No flights available yet
 
-        chosen_name = Passenger.passenger_id_counter
-        Passenger.passenger_id_counter += 1
+        with airport.flight_capacity_lock:
+            # Find flights with available capacity and assigned gates
+            available_flights = [
+                flight for flight, capacity in airport.flight_capacities.items()
+                if capacity > 0 and flight in airport.flights_to_gates
+            ]
 
-        # Select a random flight that has a gate
-        flight = random.choice(list(airport.flights_to_gates.keys()))
-        gate_id = airport.flights_to_gates[flight]
+            if not available_flights:
+                return None  # No flights with available capacity and assigned gates
+
+            chosen_name = Passenger.passenger_id_counter
+            Passenger.passenger_id_counter += 1
+
+            # Select a random flight that has capacity and a gate assigned
+            flight = random.choice(available_flights)
+            gate_id = airport.flights_to_gates[flight]
+
+            # Decrement the capacity
+            airport.flight_capacities[flight] -= 1
 
         return Passenger(
             name=chosen_name,

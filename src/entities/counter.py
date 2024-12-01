@@ -17,7 +17,7 @@ class Counter(threading.Thread):
         self.is_active = True
 
     def run(self):
-        while self.is_active:
+        while self.is_active and not self.airport.simulation_end.is_set():
             try:
                 passenger = self.airport.counter_queue.get(timeout=1)
                 self.airport.monitor.increment_usage("counters", self.id)
